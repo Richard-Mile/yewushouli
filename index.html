@@ -121,13 +121,39 @@
             border: 1px solid #22222c;
             border-radius: 16px;
             padding: 20px;
-            transition: transform 0.3s ease;
+            /* 鼠标悬停时不再位移，避免卡片抖动 */
+            transition: border-color 0.25s ease, box-shadow 0.25s ease, filter 0.25s ease, opacity 0.25s ease;
+            will-change: box-shadow;
         }
         .task-card:hover {
-            transform: translateY(-4px);
+            /* 保持稳定，不做 translateY 位移 */
+            transform: none;
         }
-        .task-card.urgent { border-color: #ff3b5c; }
-        .task-card.warning { border-color: #ff9f1c; }
+        .task-card.normal {
+            border-color: rgba(34, 197, 94, 0.75);
+        }
+        .task-card.warning {
+            border-color: #ff9f1c;
+            box-shadow: 0 0 16px rgba(255, 159, 28, 0.12);
+        }
+        .task-card.urgent {
+            border-color: #ff3b5c;
+            animation: urgentBreath 1.35s ease-in-out infinite;
+        }
+        .task-card.completed {
+            border-color: #6b7280;
+            opacity: 0.74;
+            filter: grayscale(0.25);
+        }
+
+        @keyframes urgentBreath {
+            0%, 100% {
+                box-shadow: 0 0 0 rgba(255, 59, 92, 0.12), 0 0 8px rgba(255, 59, 92, 0.22);
+            }
+            50% {
+                box-shadow: 0 0 22px rgba(255, 59, 92, 0.55), 0 0 44px rgba(255, 59, 92, 0.28);
+            }
+        }
 
         .card-header {
             display: flex;
@@ -150,6 +176,7 @@
         .status-pill.green { background: #052e16; color: #34d399; }
         .status-pill.orange { background: #3f2a00; color: #ff9f1c; }
         .status-pill.red { background: #3f1a1a; color: #ff3b5c; }
+        .status-pill.gray { background: #1f2937; color: #9ca3af; }
 
         .main-row {
             display: flex;
@@ -311,14 +338,14 @@
     <script>
         // ==================== Firebase 配置 ====================
         const firebaseConfig = {
-  apiKey: "AIzaSyAduMWdqKBEkn5cFL0YwfmTlf77mgwH1Cg",
-  authDomain: "yewushouli-f4d6e.firebaseapp.com",
-  databaseURL: "https://yewushouli-f4d6e-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "yewushouli-f4d6e",
-  storageBucket: "yewushouli-f4d6e.firebasestorage.app",
-  messagingSenderId: "713365140691",
-  appId: "1:713365140691:web:e458f38b23d7a3b1129026"
-};
+            apiKey: "AIzaSyDemoKeyForThisDemo1234567890",           // ← 请替换成你的 Firebase 配置
+            authDomain: "your-project.firebaseapp.com",
+            databaseURL: "https://your-project-default-rtdb.firebaseio.com",
+            projectId: "your-project",
+            storageBucket: "your-project.appspot.com",
+            messagingSenderId: "1234567890",
+            appId: "1:1234567890:web:abcdef123456"
+        };
 
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
@@ -688,15 +715,17 @@
             let cls = 'task-card';
             if (item.currentSeconds <= 0) cls += ' completed';
             else if (days < 1) cls += ' urgent';
-            else if (days < 3) cls += ' warning';
+            else if (days < 2) cls += ' warning';
+            else cls += ' normal';
 
             const d = Math.floor(item.currentSeconds / 86400);
             const h = Math.floor((item.currentSeconds % 86400) / 3600);
             const m = Math.floor((item.currentSeconds % 3600) / 60);
             const s = Math.floor(item.currentSeconds % 60);
 
-            const MAX = 5 * 86400;
-            let pct = Math.max(0, Math.min(100, (item.currentSeconds / MAX) * 100));
+            // 进度条比例：3天=100%，0时0分0秒=0%
+            const MAX_PROGRESS_SECONDS = 3 * 86400;
+            let pct = Math.max(0, Math.min(100, (item.currentSeconds / MAX_PROGRESS_SECONDS) * 100));
 
             const circumference = 2 * Math.PI * 41;
             const dashoffset = circumference * (1 - pct / 100);
