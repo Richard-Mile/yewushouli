@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>业务受理情况 · 实时协作版</title>
+    
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+
+        :root {
+            --bg: #050507;
+            --card: #0a0a10;
+            --text: #f0f0f5;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: "Inter", "Microsoft YaHei", system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 30px 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1480px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .title {
+            font-family: "Space Grotesk", system-ui, sans-serif;
+            font-size: 34px;
+            font-weight: 700;
+            margin: 0;
+            letter-spacing: -2px;
+        }
+
+        .room-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #111118;
+            padding: 8px 16px;
+            border-radius: 12px;
+            border: 1px solid #2a2a38;
+        }
+
+        .room-control input {
+            background: #1a1a24;
+            border: 1px solid #333;
+            color: white;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            width: 220px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            background: #1f222b;
+            color: white;
+            border: 1px solid #2a2d38;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        button:hover {
+            background: #2a2d38;
+            border-color: #00f9ff;
+        }
+
+        .stats {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+        .stat {
+            background: #0a0a10;
+            border: 1px solid #22222c;
+            border-radius: 12px;
+            padding: 10px 18px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .stat .value {
+            font-family: "Space Grotesk", ui-monospace, monospace;
+            font-size: 23px;
+            font-weight: 700;
+        }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(355px, 1fr));
+            gap: 18px;
+        }
+
+        .task-card {
+            background: #0a0a10;
+            border: 1px solid #22222c;
+            border-radius: 16px;
+            padding: 20px;
+            transition: transform 0.3s ease;
+        }
+        .task-card:hover {
+            transform: translateY(-4px);
+        }
+        .task-card.urgent { border-color: #ff3b5c; }
+        .task-card.warning { border-color: #ff9f1c; }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 14px;
+        }
+        .task-name {
+            font-size: 16.5px;
+            font-weight: 600;
+            line-height: 1.3;
+        }
+        .status-pill {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 999px;
+            white-space: nowrap;
+        }
+        .status-pill.green { background: #052e16; color: #34d399; }
+        .status-pill.orange { background: #3f2a00; color: #ff9f1c; }
+        .status-pill.red { background: #3f1a1a; color: #ff3b5c; }
+
+        .main-row {
+            display: flex;
+            gap: 18px;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .countdown {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 7px;
+        }
+        .digit {
+            font-family: "Space Grotesk", ui-monospace, monospace;
+            font-size: 24px;
+            font-weight: 700;
+            background: #050507;
+            border: 1px solid #2a2a38;
+            border-radius: 9px;
+            padding: 9px 5px 5px;
+            color: #fff;
+            text-align: center;
+        }
+        .digit-label {
+            font-size: 8.5px;
+            color: #555;
+            margin-top: 3px;
+            text-align: center;
+            letter-spacing: 1.5px;
+        }
+
+        .circular-progress {
+            width: 82px;
+            height: 82px;
+            flex-shrink: 0;
+            position: relative;
+        }
+        .circular-progress svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+        .circular-progress .track {
+            fill: none;
+            stroke: #2a2d38;
+            stroke-width: 8;
+        }
+        .circular-progress .progress {
+            fill: none;
+            stroke-width: 8;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        .circular-progress .center {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        .circular-progress .pct {
+            font-family: "Space Grotesk", ui-monospace, monospace;
+            font-size: 20px;
+            font-weight: 700;
+            color: #fff;
+            line-height: 1;
+        }
+
+        .action-row {
+            display: flex;
+            gap: 16px;
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid #22222c;
+        }
+        .action-item {
+            flex: 1;
+        }
+        .action-label {
+            font-size: 11.5px;
+            color: #64748b;
+            margin-bottom: 5px;
+            display: block;
+        }
+        .toggle-btn {
+            width: 100%;
+            padding: 9px 0;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            border-radius: 9px;
+            cursor: pointer;
+            color: white;
+            transition: all 0.2s ease;
+        }
+        .toggle-btn.red { background: #ef4444; }
+        .toggle-btn.green { background: #22c55e; }
+        .toggle-btn:hover { filter: brightness(1.1); }
+
+        .meta {
+            margin-top: 12px;
+            font-size: 12px;
+            color: #5f6470;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .connected {
+            color: #22c55e;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1 class="title">业务受理情况</h1>
+                <div style="color:#64748b; font-size:13px;">实时协作版 · 多人同步</div>
+            </div>
+
+            <div class="room-control">
+                <span style="color:#64748b; font-size:13px;">房间ID：</span>
+                <input type="text" id="roomId" value="默认项目-2026" placeholder="群里所有人用同一个ID">
+                <button onclick="connectToRoom()" style="padding:8px 16px; font-size:13px;">连接房间</button>
+                <span id="connectionStatus" class="connected" style="display:none;">● 已连接</span>
+            </div>
+        </div>
+
+        <div class="stats" id="stats-bar" style="display:none;">
+            <div class="stat">
+                <span>总任务</span> 
+                <span class="value" id="stat-total">0</span>
+            </div>
+            <div class="stat urgent">
+                <span>紧急任务</span> 
+                <span class="value" id="stat-urgent">0</span>
+            </div>
+            <div class="stat min-time">
+                <span>最少剩余时间（小时）</span> 
+                <span class="value" id="stat-min-hours">-</span>
+            </div>
+        </div>
+
+       <div style="margin-bottom:20px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+    <button onclick="selectFile()">📁 上传 Excel</button>
+    <button onclick="refreshFromSavedFile()" style="background:#2a2d38;">⟳ 刷新数据</button>
+    <span style="color:#64748b; font-size:13px;">提示：群里所有人使用同一个房间ID，即可实时看到按钮状态</span>
+</div>
+
+        <div id="cards-container" class="cards-grid"></div>
+    </div>
+
+    <canvas id="bg-particles" style="position:fixed; inset:0; z-index:0; pointer-events:none; opacity:0.35;"></canvas>
+
+    <script>
+        // ==================== Firebase 配置 ====================
+        const firebaseConfig = {
+  apiKey: "AIzaSyAduMWdqKBEkn5cFL0YwfmTlf77mgwH1Cg",
+  authDomain: "yewushouli-f4d6e.firebaseapp.com",
+  databaseURL: "https://yewushouli-f4d6e-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "yewushouli-f4d6e",
+  storageBucket: "yewushouli-f4d6e.firebasestorage.app",
+  messagingSenderId: "713365140691",
+  appId: "1:713365140691:web:e458f38b23d7a3b1129026"
+};
+
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        let currentRoomId = "";
+        let countdownData = [];
+        let savedFileHandle = null;
+        let firebaseListeners = {};
+
+        // ==================== 背景粒子 ====================
+        const canvas = document.getElementById('bg-particles');
+        const ctx = canvas.getContext('2d', { alpha: true });
+        let particles = [];
+        let mouse = { x: null, y: null };
+
+        function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+        window.addEventListener('resize', resize);
+        resize();
+
+        class Particle {
+            constructor() { this.reset(); }
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 1.4 + 0.5;
+                this.speedX = (Math.random() - 0.5) * 0.28;
+                this.speedY = (Math.random() - 0.5) * 0.28;
+                this.alpha = Math.random() * 0.3 + 0.15;
+            }
+            update() {
+                if (mouse.x !== null) {
+                    const dx = mouse.x - this.x;
+                    const dy = mouse.y - this.y;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist < 90) {
+                        const f = (90 - dist) / 90;
+                        this.speedX += (dx / dist) * f * 0.25;
+                        this.speedY += (dy / dist) * f * 0.25;
+                    }
+                }
+                this.x += this.speedX; this.y += this.speedY;
+                this.speedX *= 0.985; this.speedY *= 0.985;
+                if (this.x < 0 || this.x > canvas.width) this.speedX *= -1;
+                if (this.y < 0 || this.y > canvas.height) this.speedY *= -1;
+            }
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.fillStyle = '#64748b';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        function initParticles(n = 55) { particles = []; for (let i = 0; i < n; i++) particles.push(new Particle()); }
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let p of particles) { p.update(); p.draw(); }
+            requestAnimationFrame(animate);
+        }
+        window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+        initParticles();
+        animate();
+
+        // ==================== 房间 / Firebase 同步 ====================
+        function taskKey(name) {
+            // Firebase Realtime Database 的 key 不能包含 . # $ [ ] /
+            // 用 encodeURIComponent 后再处理英文句点，确保任务名称可作为安全 key
+            return encodeURIComponent(String(name)).replace(/\./g, '%2E');
+        }
+
+        function calcRemainSeconds(item) {
+            if (item.endAt) {
+                return Math.max(0, Math.floor((Number(item.endAt) - Date.now()) / 1000));
+            }
+            return Math.max(0, Number(item.currentSeconds) || 0);
+        }
+
+        function normalizeTaskFromFirebase(fbTask) {
+            const initialSeconds = Number(fbTask.initialSeconds) || 0;
+            const item = {
+                name: fbTask.name || '未命名任务',
+                acceptSerial: fbTask.acceptSerial || '',
+                initialSeconds,
+                endAt: Number(fbTask.endAt) || (Date.now() + initialSeconds * 1000),
+                currentSeconds: 0,
+                orderTaken: fbTask.orderTaken || 'red',
+                completed: fbTask.completed || 'red'
+            };
+            item.currentSeconds = calcRemainSeconds(item);
+            return item;
+        }
+
+        function getCurrentRoomTasksRef() {
+            if (!currentRoomId) return null;
+            return database.ref(`rooms/${currentRoomId}/tasks`);
+        }
+
+        // ==================== 连接房间 ====================
+        function connectToRoom() {
+            const roomInput = document.getElementById('roomId').value.trim();
+            if (!roomInput) {
+                alert("请输入房间ID");
+                return;
+            }
+
+            // 断开之前的监听
+            Object.values(firebaseListeners).forEach(listenerInfo => {
+                if (listenerInfo && listenerInfo.ref && listenerInfo.callback) {
+                    listenerInfo.ref.off(listenerInfo.event, listenerInfo.callback);
+                }
+            });
+            firebaseListeners = {};
+
+            currentRoomId = roomInput;
+            document.getElementById('connectionStatus').style.display = 'inline';
+            document.getElementById('connectionStatus').textContent = '● 已连接到房间: ' + currentRoomId;
+
+            // 重点：即使当前浏览器没有上传 Excel，也要监听 Firebase，直接从房间读取任务列表
+            listenToAllTasks();
+        }
+
+        // ==================== 监听 Firebase 变化 ====================
+        function listenToAllTasks() {
+            if (!currentRoomId) return;
+
+            // 防止重复绑定 Firebase 监听
+            if (firebaseListeners['allTasks']) {
+                const old = firebaseListeners['allTasks'];
+                old.ref.off(old.event, old.callback);
+                delete firebaseListeners['allTasks'];
+            }
+
+            const tasksRef = getCurrentRoomTasksRef();
+            if (!tasksRef) return;
+
+            const callback = (snapshot) => {
+                const firebaseData = snapshot.val() || {};
+                const list = Object.values(firebaseData).map(normalizeTaskFromFirebase);
+
+                countdownData = list.sort((a,b) => a.currentSeconds - b.currentSeconds);
+                renderCards();
+
+                if (countdownData.length) {
+                    document.querySelector('.stats').style.display = 'flex';
+                } else {
+                    document.querySelector('.stats').style.display = 'none';
+                }
+            };
+
+            tasksRef.on('value', callback, (error) => {
+                console.error('读取 Firebase 失败:', error);
+                alert('读取 Firebase 失败：' + error.message + '\n请检查 Firebase 配置和 Realtime Database 读写规则。');
+            });
+
+            firebaseListeners['allTasks'] = { ref: tasksRef, event: 'value', callback };
+        }
+
+        async function publishTasksToFirebase(tasks, fileName = '') {
+            if (!currentRoomId) return;
+
+            const tasksRef = getCurrentRoomTasksRef();
+            if (!tasksRef) return;
+
+            // 读取旧状态，避免重新上传 Excel 后“已接单/已完成”状态被清空
+            let oldData = {};
+            try {
+                const snap = await tasksRef.once('value');
+                oldData = snap.val() || {};
+            } catch (err) {
+                console.warn('读取旧任务状态失败，将按本地状态上传:', err);
+            }
+
+            const now = Date.now();
+            const payload = {};
+
+            tasks.forEach(item => {
+                const key = taskKey(item.name);
+                const oldTask = oldData[key] || {};
+                const initialSeconds = Number(item.initialSeconds) || Number(item.currentSeconds) || 0;
+
+                payload[key] = {
+                    name: item.name,
+                    acceptSerial: item.acceptSerial || '',
+                    initialSeconds,
+                    // 用统一截止时间同步倒计时，其他浏览器不用上传 Excel 也能显示准确剩余时间
+                    endAt: now + initialSeconds * 1000,
+                    orderTaken: item.orderTaken || oldTask.orderTaken || 'red',
+                    completed: item.completed || oldTask.completed || 'red',
+                    updatedAt: firebase.database.ServerValue.TIMESTAMP
+                };
+            });
+
+            await tasksRef.set(payload);
+            await database.ref(`rooms/${currentRoomId}/meta`).update({
+                lastExcelFileName: fileName || '',
+                lastExcelUploadedAt: firebase.database.ServerValue.TIMESTAMP
+            });
+        }
+
+        // 更新单个任务状态到 Firebase
+        function updateTaskInFirebase(taskName, field, value) {
+            if (!currentRoomId) {
+                alert("请先连接房间！");
+                return;
+            }
+            const taskRef = database.ref(`rooms/${currentRoomId}/tasks/${taskKey(taskName)}`);
+            taskRef.update({
+                [field]: value,
+                lastUpdated: firebase.database.ServerValue.TIMESTAMP
+            }).catch(err => {
+                console.error("写入 Firebase 失败:", err);
+                alert('写入 Firebase 失败：' + err.message + '\n请检查 Firebase 配置和 Realtime Database 写入规则。');
+            });
+        }
+
+        // ==================== Excel 加载 ====================
+        async function selectFile() {
+            try {
+                if (!currentRoomId) {
+                    const roomInput = document.getElementById('roomId').value.trim() || '默认项目-2026';
+                    document.getElementById('roomId').value = roomInput;
+                    connectToRoom();
+                }
+
+                const [h] = await window.showOpenFilePicker({ 
+                    types: [{description:'Excel', accept:{'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':['.xlsx']}}] 
+                });
+                savedFileHandle = h;
+                const f = await savedFileHandle.getFile();
+                await loadExcel(f);
+            } catch(e){
+                console.warn('用户取消选择文件或文件读取失败:', e);
+            }
+        }
+
+        async function ensureFileReadPermission(fileHandle) {
+            if (!fileHandle.queryPermission || !fileHandle.requestPermission) return true;
+            const options = { mode: 'read' };
+            if (await fileHandle.queryPermission(options) === 'granted') return true;
+            return await fileHandle.requestPermission(options) === 'granted';
+        }
+
+        async function refreshFromSavedFile() {
+            try {
+                if (!savedFileHandle) {
+                    alert('请先点击“上传 Excel”选择一次文件，然后再点击“刷新数据”。\n说明：另一个浏览器只需要连接房间，不需要上传 Excel。');
+                    return;
+                }
+
+                const hasPermission = await ensureFileReadPermission(savedFileHandle);
+                if (!hasPermission) {
+                    alert('没有读取文件权限，请重新上传 Excel 文件。');
+                    return;
+                }
+
+                const f = await savedFileHandle.getFile();
+                await loadExcel(f);
+            } catch (e) {
+                console.error('刷新 Excel 失败:', e);
+                alert('刷新失败，请重新点击“上传 Excel”选择文件。');
+            }
+        }
+
+        async function loadExcel(file) {
+            return new Promise((resolve, reject) => {
+                const r = new FileReader();
+                r.onload = async e => {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const wb = XLSX.read(data, {type:'array'});
+                        const ws = wb.Sheets[wb.SheetNames[0]];
+                        const rows = XLSX.utils.sheet_to_json(ws, {header:1});
+
+                        const newData = [];
+                        for (let i = 1; i < rows.length; i++) {
+                            const row = rows[i];
+                            if (row[0] && row[2]) {
+                                const secs = parseChineseDuration(String(row[2]).trim());
+                                newData.push({
+                                    name: String(row[0]).trim(),
+                                    acceptSerial: row[1] || '',
+                                    initialSeconds: secs,
+                                    endAt: Date.now() + secs * 1000,
+                                    currentSeconds: secs,
+                                    orderTaken: 'red',
+                                    completed: 'red'
+                                });
+                            }
+                        }
+
+                        // 保留本机已有状态，之后 publishTasksToFirebase 还会再保留 Firebase 里的旧状态
+                        const mergedData = newData.map(newItem => {
+                            const existing = countdownData.find(old => old.name === newItem.name);
+                            if (existing) {
+                                return { ...newItem, orderTaken: existing.orderTaken, completed: existing.completed };
+                            }
+                            return newItem;
+                        });
+
+                        countdownData = mergedData.sort((a,b) => a.currentSeconds - b.currentSeconds);
+                        renderCards();
+                        document.querySelector('.stats').style.display = countdownData.length ? 'flex' : 'none';
+
+                        if (!currentRoomId) {
+                            document.getElementById('roomId').value = document.getElementById('roomId').value.trim() || '默认项目-2026';
+                            connectToRoom();
+                        }
+
+                        // 重点：上传/刷新 Excel 后，把完整任务列表写入 Firebase
+                        // 其他浏览器只要连接同一个房间，就能直接看到数据
+                        await publishTasksToFirebase(countdownData, file && file.name ? file.name : '');
+                        resolve();
+                    } catch(err) {
+                        alert('解析失败: ' + err.message);
+                        reject(err);
+                    }
+                };
+                r.onerror = () => {
+                    alert('读取文件失败');
+                    reject(r.error);
+                };
+                r.readAsArrayBuffer(file);
+            });
+        }
+
+        function parseChineseDuration(str) {
+            if (!str) return 0;
+            let t = 0;
+            const d = str.match(/(\d+)\s*天/); if (d) t += +d[1]*86400;
+            const h = str.match(/(\d+)\s*(小时|时)/); if (h) t += +h[1]*3600;
+            const m = str.match(/(\d+)\s*(分钟|分)/); if (m) t += +m[1]*60;
+            const s = str.match(/(\d+)\s*秒/); if (s) t += +s[1];
+            return t;
+        }
+
+        function getStatus(sec) {
+            if (sec <= 0) return {label:'已结束', cls:'gray', color:'#9ca3af'};
+            const d = sec / 86400;
+            if (d >= 2) return {label:'正常', cls:'green', color:'#22c55e'};
+            if (d >= 1) return {label:'警告', cls:'orange', color:'#f59e0b'};
+            return {label:'紧急', cls:'red', color:'#ef4444'};
+        }
+
+        function toggleStatus(index, field, btn) {
+            const item = countdownData[index];
+            const newValue = item[field] === 'red' ? 'green' : 'red';
+            
+            item[field] = newValue;
+            
+            btn.classList.remove('red', 'green');
+            btn.classList.add(newValue);
+            btn.textContent = (field === 'orderTaken') 
+                ? (newValue === 'green' ? '已接单' : '未接单')
+                : (newValue === 'green' ? '已完成' : '未完成');
+
+            // 同步到 Firebase
+            updateTaskInFirebase(item.name, field, newValue);
+        }
+
+        function createCard(item, idx) {
+            const st = getStatus(item.currentSeconds);
+            const days = item.currentSeconds / 86400;
+
+            let cls = 'task-card';
+            if (item.currentSeconds <= 0) cls += ' completed';
+            else if (days < 1) cls += ' urgent';
+            else if (days < 3) cls += ' warning';
+
+            const d = Math.floor(item.currentSeconds / 86400);
+            const h = Math.floor((item.currentSeconds % 86400) / 3600);
+            const m = Math.floor((item.currentSeconds % 3600) / 60);
+            const s = Math.floor(item.currentSeconds % 60);
+
+            const MAX = 5 * 86400;
+            let pct = Math.max(0, Math.min(100, (item.currentSeconds / MAX) * 100));
+
+            const circumference = 2 * Math.PI * 41;
+            const dashoffset = circumference * (1 - pct / 100);
+
+            const acc = item.acceptSerial ? formatExcelDate(item.acceptSerial) : '—';
+
+            return `
+                <div class="${cls}" data-index="${idx}">
+                    <div class="card-header">
+                        <div class="task-name">${item.name}</div>
+                        <div class="status-pill ${st.cls}">${st.label}</div>
+                    </div>
+
+                    <div class="main-row">
+                        <div class="countdown">
+                            <div class="digit-group">
+                                <div class="digit">${String(d).padStart(2,'0')}</div>
+                                <div class="digit-label">天</div>
+                            </div>
+                            <div class="digit-group">
+                                <div class="digit">${String(h).padStart(2,'0')}</div>
+                                <div class="digit-label">时</div>
+                            </div>
+                            <div class="digit-group">
+                                <div class="digit">${String(m).padStart(2,'0')}</div>
+                                <div class="digit-label">分</div>
+                            </div>
+                            <div class="digit-group">
+                                <div class="digit">${String(s).padStart(2,'0')}</div>
+                                <div class="digit-label">秒</div>
+                            </div>
+                        </div>
+
+                        <div class="circular-progress">
+                            <svg viewBox="0 0 100 100">
+                                <circle class="track" cx="50" cy="50" r="41"></circle>
+                                <circle class="progress" cx="50" cy="50" r="41"
+                                        stroke="${st.color}"
+                                        stroke-dasharray="${circumference}"
+                                        stroke-dashoffset="${dashoffset}"></circle>
+                            </svg>
+                            <div class="center">
+                                <div class="pct">${Math.round(pct)}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="action-row">
+                        <div class="action-item">
+                            <span class="action-label">接单情况</span>
+                            <button class="toggle-btn ${item.orderTaken}" 
+                                    onclick="toggleStatus(${idx}, 'orderTaken', this)">
+                                ${item.orderTaken === 'green' ? '已接单' : '未接单'}
+                            </button>
+                        </div>
+                        <div class="action-item">
+                            <span class="action-label">是否完成</span>
+                            <button class="toggle-btn ${item.completed}" 
+                                    onclick="toggleStatus(${idx}, 'completed', this)">
+                                ${item.completed === 'green' ? '已完成' : '未完成'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="meta">
+                        <span>受理 ${acc}</span>
+                        <span style="color:${st.color}; font-weight:600;">剩余 ${d} 天</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderCards() {
+            const wrap = document.getElementById('cards-container');
+            if (!countdownData.length) {
+                wrap.innerHTML = `<div style="text-align:center; padding:70px 20px; color:#555;"><h3>暂无数据</h3><p>请上传 Excel 文件并连接房间</p></div>`;
+                return;
+            }
+            wrap.innerHTML = countdownData.map((it, i) => createCard(it, i)).join('');
+            updateStats();
+        }
+
+        function updateStats() {
+            let t = 0, u = 0;
+            let minSeconds = Infinity;
+
+            countdownData.forEach(it => {
+                if (it.currentSeconds > 0) {
+                    t++;
+                    const d = it.currentSeconds / 86400;
+                    if (d < 1) u++;
+                    if (it.currentSeconds < minSeconds) minSeconds = it.currentSeconds;
+                }
+            });
+
+            document.getElementById('stat-total').textContent = t;
+            document.getElementById('stat-urgent').textContent = u;
+
+            const minHoursEl = document.getElementById('stat-min-hours');
+            minHoursEl.textContent = (minSeconds === Infinity) ? '-' : Math.floor(minSeconds / 3600);
+        }
+
+        function updateAll() {
+            if (!countdownData.length) return;
+            countdownData.forEach(it => {
+                it.currentSeconds = calcRemainSeconds(it);
+            });
+            countdownData.sort((a,b) => a.currentSeconds - b.currentSeconds);
+            renderCards();
+        }
+
+        function formatExcelDate(serial) {
+            if (!serial) return '—';
+            const base = new Date(1899, 11, 30);
+            const d = new Date(base.getTime() + serial * 86400000);
+            return d.toLocaleString('zh-CN', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false}).replace(/\//g, '-');
+        }
+
+        setInterval(updateAll, 1000);
+    </script>
+</body>
+</html>
