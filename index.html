@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>业务受理情况 · 实时协作版</title>
+    <!-- progress-color-rules-v2: 2026-07-02 -->
     
     <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -232,6 +233,15 @@
             stroke-linecap: round;
             transition: stroke-dashoffset 0.6s cubic-bezier(0.23, 1, 0.32, 1);
         }
+        /* 进度条颜色强制跟随状态，避免旧样式或浏览器缓存导致看起来未变化 */
+        .task-card.normal .circular-progress .progress { stroke: #22c55e !important; }
+        .task-card.warning .circular-progress .progress { stroke: #ff9f1c !important; }
+        .task-card.urgent .circular-progress .progress { stroke: #ff3b5c !important; }
+        .task-card.completed .circular-progress .progress { stroke: #9ca3af !important; }
+        .task-card.normal .pct { color: #22c55e !important; }
+        .task-card.warning .pct { color: #ff9f1c !important; }
+        .task-card.urgent .pct { color: #ff3b5c !important; }
+        .task-card.completed .pct { color: #9ca3af !important; }
         .circular-progress .center {
             position: absolute;
             inset: 0;
@@ -242,7 +252,7 @@
         }
         .circular-progress .pct {
             font-family: "Space Grotesk", ui-monospace, monospace;
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 700;
             color: #fff;
             line-height: 1;
@@ -305,7 +315,6 @@
                 <span style="color:#64748b; font-size:13px;">房间ID：</span>
                 <input type="text" id="roomId" value="默认项目-2026" placeholder="群里所有人用同一个ID">
                 <button onclick="connectToRoom()" style="padding:8px 16px; font-size:13px;">连接房间</button>
-                <span id="connectionStatus" class="connected" style="display:none;">● 已连接</span>
             </div>
         </div>
 
@@ -337,9 +346,10 @@
 
     <script>
         // ==================== Firebase 配置 ====================
-        const firebaseConfig = {
+       const firebaseConfig = {
   apiKey: "AIzaSyAduMWdqKBEkn5cFL0YwfmTlf77mgwH1Cg",
   authDomain: "yewushouli-f4d6e.firebaseapp.com",
+  databaseURL: "https://yewushouli-f4d6e-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "yewushouli-f4d6e",
   storageBucket: "yewushouli-f4d6e.firebasestorage.app",
   messagingSenderId: "713365140691",
@@ -353,6 +363,36 @@
         let countdownData = [];
         let savedFileHandle = null;
         let firebaseListeners = {};
+        let firebaseConnected = false;
+        let activeReadTimer = null;
+
+        // 同步状态提示已隐藏：保留日志，避免页面显示橙色“状态”文字
+        function setSyncStatus(message, type = 'info') {
+            if (message) {
+                const level = type === 'error' ? 'error' : (type === 'ok' ? 'log' : 'info');
+                console[level](message);
+            }
+        }
+
+        function withTimeout(promise, ms, message) {
+            return new Promise((resolve, reject) => {
+                const timer = setTimeout(() => reject(new Error(message || `操作超时：${ms}ms`)), ms);
+                Promise.resolve(promise).then(
+                    value => { clearTimeout(timer); resolve(value); },
+                    err => { clearTimeout(timer); reject(err); }
+                );
+            });
+        }
+
+        function watchFirebaseConnection() {
+            const infoRef = database.ref('.info/connected');
+            const callback = (snapshot) => {
+                // 只在内部记录 Firebase 连接状态，不在页面右上角显示任何提示文字
+                firebaseConnected = snapshot.val() === true;
+            };
+            infoRef.on('value', callback);
+            firebaseListeners['connection'] = { ref: infoRef, event: 'value', callback };
+        }
 
         // ==================== 背景粒子 ====================
         const canvas = document.getElementById('bg-particles');
@@ -462,8 +502,8 @@
             firebaseListeners = {};
 
             currentRoomId = roomInput;
-            document.getElementById('connectionStatus').style.display = 'inline';
-            document.getElementById('connectionStatus').textContent = '● 已连接到房间: ' + currentRoomId;
+            setSyncStatus('状态：正在连接 Firebase，并读取房间 ' + currentRoomId + ' 的任务数据...', 'info');
+            watchFirebaseConnection();
 
             // 重点：即使当前浏览器没有上传 Excel，也要监听 Firebase，直接从房间读取任务列表
             listenToAllTasks();
@@ -484,6 +524,10 @@
             if (!tasksRef) return;
 
             const callback = (snapshot) => {
+                if (activeReadTimer) {
+                    clearTimeout(activeReadTimer);
+                    activeReadTimer = null;
+                }
                 const firebaseData = snapshot.val() || {};
                 const list = Object.values(firebaseData).map(normalizeTaskFromFirebase);
 
@@ -492,13 +536,24 @@
 
                 if (countdownData.length) {
                     document.querySelector('.stats').style.display = 'flex';
+                    setSyncStatus('状态：已从 Firebase 读取 ' + countdownData.length + ' 条任务。其他电脑输入同一房间ID即可同步。', 'ok');
                 } else {
                     document.querySelector('.stats').style.display = 'none';
+                    setSyncStatus('状态：房间 ' + currentRoomId + ' 暂无任务。请先在任意一台电脑使用该房间ID上传 Excel。', 'info');
                 }
             };
 
+            activeReadTimer = setTimeout(() => {
+                setSyncStatus('状态：Firebase 读取超过 10 秒没有返回。请检查：① databaseURL 是否是 Realtime Database 数据页顶部地址；② 数据库规则是否允许 read/write；③ Firebase 控制台是否已经创建 Realtime Database；④ 当前网络是否能访问 Firebase。', 'error');
+            }, 10000);
+
             tasksRef.on('value', callback, (error) => {
+                if (activeReadTimer) {
+                    clearTimeout(activeReadTimer);
+                    activeReadTimer = null;
+                }
                 console.error('读取 Firebase 失败:', error);
+                setSyncStatus('状态：读取 Firebase 失败：' + error.message + '\n请检查 Firebase 配置和 Realtime Database 读写规则。', 'error');
                 alert('读取 Firebase 失败：' + error.message + '\n请检查 Firebase 配置和 Realtime Database 读写规则。');
             });
 
@@ -511,13 +566,16 @@
             const tasksRef = getCurrentRoomTasksRef();
             if (!tasksRef) return;
 
-            // 读取旧状态，避免重新上传 Excel 后“已接单/已完成”状态被清空
+            setSyncStatus('状态：Excel 已解析 ' + tasks.length + ' 条任务，正在连接 Firebase 并上传...', 'info');
+
+            // 读取旧状态，避免重新上传 Excel 后“已接单/已完成”状态被清空。读取不成功不阻塞上传。
             let oldData = {};
             try {
-                const snap = await tasksRef.once('value');
+                const snap = await withTimeout(tasksRef.once('value'), 8000, '读取旧任务状态超时');
                 oldData = snap.val() || {};
             } catch (err) {
                 console.warn('读取旧任务状态失败，将按本地状态上传:', err);
+                setSyncStatus('状态：旧状态读取失败，继续尝试上传 Excel 数据。原因：' + err.message, 'info');
             }
 
             const now = Date.now();
@@ -540,11 +598,18 @@
                 };
             });
 
-            await tasksRef.set(payload);
-            await database.ref(`rooms/${currentRoomId}/meta`).update({
-                lastExcelFileName: fileName || '',
-                lastExcelUploadedAt: firebase.database.ServerValue.TIMESTAMP
-            });
+            try {
+                await withTimeout(tasksRef.set(payload), 12000, '上传任务到 Firebase 超时');
+                await withTimeout(database.ref(`rooms/${currentRoomId}/meta`).update({
+                    lastExcelFileName: fileName || '',
+                    lastExcelUploadedAt: firebase.database.ServerValue.TIMESTAMP
+                }), 8000, '更新房间信息超时');
+                setSyncStatus('状态：已上传并同步 ' + tasks.length + ' 条任务到 Firebase。请在其他电脑输入同一房间ID：' + currentRoomId, 'ok');
+            } catch (err) {
+                console.error('上传 Firebase 失败:', err);
+                setSyncStatus('状态：上传 Firebase 失败：' + err.message + '\n请重点检查 databaseURL、Realtime Database 是否创建、Rules 是否允许写入。', 'error');
+                throw err;
+            }
         }
 
         // 更新单个任务状态到 Firebase
@@ -579,7 +644,10 @@
                 const f = await savedFileHandle.getFile();
                 await loadExcel(f);
             } catch(e){
-                console.warn('用户取消选择文件或文件读取失败:', e);
+                console.warn('用户取消选择文件、文件读取失败或 Firebase 上传失败:', e);
+                if (e && e.name !== 'AbortError') {
+                    setSyncStatus('状态：上传流程失败：' + (e.message || e), 'error');
+                }
             }
         }
 
@@ -684,11 +752,12 @@
         }
 
         function getStatus(sec) {
+            // 颜色规则：已结束灰色；剩余 ≥2天绿色；剩余 1~2天橙色；剩余 <1天红色
             if (sec <= 0) return {label:'已结束', cls:'gray', color:'#9ca3af'};
             const d = sec / 86400;
             if (d >= 2) return {label:'正常', cls:'green', color:'#22c55e'};
-            if (d >= 1) return {label:'警告', cls:'orange', color:'#f59e0b'};
-            return {label:'紧急', cls:'red', color:'#ef4444'};
+            if (d >= 1) return {label:'警告', cls:'orange', color:'#ff9f1c'};
+            return {label:'紧急', cls:'red', color:'#ff3b5c'};
         }
 
         function toggleStatus(index, field, btn) {
@@ -728,6 +797,7 @@
 
             const circumference = 2 * Math.PI * 41;
             const dashoffset = circumference * (1 - pct / 100);
+            const trackColor = item.currentSeconds <= 0 ? '#6b7280' : '#2a2d38';
 
             const acc = item.acceptSerial ? formatExcelDate(item.acceptSerial) : '—';
 
@@ -760,14 +830,15 @@
 
                         <div class="circular-progress">
                             <svg viewBox="0 0 100 100">
-                                <circle class="track" cx="50" cy="50" r="41"></circle>
+                                <circle class="track" cx="50" cy="50" r="41" stroke="${trackColor}"></circle>
                                 <circle class="progress" cx="50" cy="50" r="41"
                                         stroke="${st.color}"
+                                        style="stroke:${st.color} !important;"
                                         stroke-dasharray="${circumference}"
                                         stroke-dashoffset="${dashoffset}"></circle>
                             </svg>
                             <div class="center">
-                                <div class="pct">${Math.round(pct)}</div>
+                                <div class="pct" style="color:${st.color} !important;">${Math.round(pct)}%</div>
                             </div>
                         </div>
                     </div>
