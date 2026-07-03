@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>业务受理情况 · 实时协作版</title>
-    <!-- progress-color-rules-v2: 2026-07-02 -->
+    <!-- construction-first-light-theme: 2026-07-03 -->
     
     <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -16,16 +16,21 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
 
         :root {
-            --bg: #050507;
-            --card: #0a0a10;
-            --text: #f0f0f5;
+            --bg: #f6f8fb;
+            --card: #ffffff;
+            --text: #111827;
+            --muted: #64748b;
+            --border: #e5e7eb;
         }
 
         * { box-sizing: border-box; }
 
         body {
             font-family: "Inter", "Microsoft YaHei", system-ui, sans-serif;
-            background: var(--bg);
+            background:
+                radial-gradient(circle at 12% 8%, rgba(59, 130, 246, 0.08), transparent 28%),
+                radial-gradient(circle at 88% 0%, rgba(34, 197, 94, 0.07), transparent 26%),
+                var(--bg);
             color: var(--text);
             margin: 0;
             padding: 30px 20px;
@@ -58,36 +63,43 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            background: #111118;
+            background: rgba(255, 255, 255, 0.92);
             padding: 8px 16px;
             border-radius: 12px;
-            border: 1px solid #2a2a38;
+            border: 1px solid var(--border);
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
         }
 
         .room-control input {
-            background: #1a1a24;
-            border: 1px solid #333;
-            color: white;
+            background: #ffffff;
+            border: 1px solid #d1d5db;
+            color: #111827;
             padding: 8px 14px;
             border-radius: 8px;
             font-size: 14px;
             width: 220px;
+            outline: none;
+        }
+        .room-control input:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
         }
 
         button {
             padding: 10px 20px;
             font-size: 14px;
             font-weight: 600;
-            background: #1f222b;
+            background: #2563eb;
             color: white;
-            border: 1px solid #2a2d38;
+            border: 1px solid #1d4ed8;
             border-radius: 10px;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: background 0.2s ease, border-color 0.2s ease, filter 0.2s ease;
+            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.18);
         }
         button:hover {
-            background: #2a2d38;
-            border-color: #00f9ff;
+            background: #1d4ed8;
+            border-color: #1e40af;
         }
 
         .stats {
@@ -97,13 +109,14 @@
             flex-wrap: wrap;
         }
         .stat {
-            background: #0a0a10;
-            border: 1px solid #22222c;
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid var(--border);
             border-radius: 12px;
             padding: 10px 18px;
             display: flex;
             align-items: center;
             gap: 10px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
         }
         .stat .value {
             font-family: "Space Grotesk", ui-monospace, monospace;
@@ -118,13 +131,14 @@
         }
 
         .task-card {
-            background: #0a0a10;
-            border: 1px solid #22222c;
+            background: rgba(255, 255, 255, 0.96);
+            border: 1px solid var(--border);
             border-radius: 16px;
             padding: 20px;
             /* 鼠标悬停时不再位移，避免卡片抖动 */
             transition: border-color 0.25s ease, box-shadow 0.25s ease, filter 0.25s ease, opacity 0.25s ease;
             will-change: box-shadow;
+            box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
         }
         .task-card:hover {
             /* 保持稳定，不做 translateY 位移 */
@@ -174,10 +188,10 @@
             border-radius: 999px;
             white-space: nowrap;
         }
-        .status-pill.green { background: #052e16; color: #34d399; }
-        .status-pill.orange { background: #3f2a00; color: #ff9f1c; }
-        .status-pill.red { background: #3f1a1a; color: #ff3b5c; }
-        .status-pill.gray { background: #1f2937; color: #9ca3af; }
+        .status-pill.green { background: #dcfce7; color: #166534; }
+        .status-pill.orange { background: #ffedd5; color: #9a3412; }
+        .status-pill.red { background: #fee2e2; color: #991b1b; }
+        .status-pill.gray { background: #f3f4f6; color: #4b5563; }
 
         .main-row {
             display: flex;
@@ -196,11 +210,11 @@
             font-family: "Space Grotesk", ui-monospace, monospace;
             font-size: 24px;
             font-weight: 700;
-            background: #050507;
-            border: 1px solid #2a2a38;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
             border-radius: 9px;
             padding: 9px 5px 5px;
-            color: #fff;
+            color: #111827;
             text-align: center;
         }
         .digit-label {
@@ -224,7 +238,7 @@
         }
         .circular-progress .track {
             fill: none;
-            stroke: #2a2d38;
+            stroke: #e5e7eb;
             stroke-width: 8;
         }
         .circular-progress .progress {
@@ -259,14 +273,15 @@
         }
 
         .action-row {
-            display: flex;
-            gap: 16px;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
             margin-top: 14px;
             padding-top: 14px;
-            border-top: 1px solid #22222c;
+            border-top: 1px solid #e5e7eb;
         }
         .action-item {
-            flex: 1;
+            min-width: 0;
         }
         .action-label {
             font-size: 11.5px;
@@ -277,13 +292,14 @@
         .toggle-btn {
             width: 100%;
             padding: 9px 0;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             border: none;
             border-radius: 9px;
             cursor: pointer;
             color: white;
-            transition: all 0.2s ease;
+            transition: filter 0.2s ease, opacity 0.2s ease;
+            box-shadow: none;
         }
         .toggle-btn.red { background: #ef4444; }
         .toggle-btn.green { background: #22c55e; }
@@ -335,14 +351,14 @@
 
        <div style="margin-bottom:20px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
     <button onclick="selectFile()">📁 上传 Excel</button>
-    <button onclick="refreshFromSavedFile()" style="background:#2a2d38;">⟳ 刷新数据</button>
+    <button onclick="refreshFromSavedFile()" style="background:#0f172a; border-color:#0f172a; box-shadow:0 6px 16px rgba(15,23,42,0.12);">⟳ 刷新数据</button>
     <span style="color:#64748b; font-size:13px;">提示：群里所有人使用同一个房间ID，即可实时看到按钮状态</span>
 </div>
 
         <div id="cards-container" class="cards-grid"></div>
     </div>
 
-    <canvas id="bg-particles" style="position:fixed; inset:0; z-index:0; pointer-events:none; opacity:0.35;"></canvas>
+    <canvas id="bg-particles" style="position:fixed; inset:0; z-index:0; pointer-events:none; opacity:0.18;"></canvas>
 
     <script>
         // ==================== Firebase 配置 ====================
@@ -433,7 +449,7 @@
             draw() {
                 ctx.save();
                 ctx.globalAlpha = this.alpha;
-                ctx.fillStyle = '#64748b';
+                ctx.fillStyle = '#94a3b8';
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
                 ctx.fill();
@@ -474,7 +490,8 @@
                 endAt: Number(fbTask.endAt) || (Date.now() + initialSeconds * 1000),
                 currentSeconds: 0,
                 orderTaken: fbTask.orderTaken || 'red',
-                completed: fbTask.completed || 'red'
+                completed: fbTask.completed || 'red',
+                constructed: fbTask.constructed || 'red'
             };
             item.currentSeconds = calcRemainSeconds(item);
             return item;
@@ -594,6 +611,7 @@
                     endAt: now + initialSeconds * 1000,
                     orderTaken: item.orderTaken || oldTask.orderTaken || 'red',
                     completed: item.completed || oldTask.completed || 'red',
+                    constructed: item.constructed || oldTask.constructed || 'red',
                     updatedAt: firebase.database.ServerValue.TIMESTAMP
                 };
             });
@@ -701,7 +719,8 @@
                                     endAt: Date.now() + secs * 1000,
                                     currentSeconds: secs,
                                     orderTaken: 'red',
-                                    completed: 'red'
+                                    completed: 'red',
+                                    constructed: 'red'
                                 });
                             }
                         }
@@ -710,7 +729,12 @@
                         const mergedData = newData.map(newItem => {
                             const existing = countdownData.find(old => old.name === newItem.name);
                             if (existing) {
-                                return { ...newItem, orderTaken: existing.orderTaken, completed: existing.completed };
+                                return {
+                                    ...newItem,
+                                    orderTaken: existing.orderTaken || 'red',
+                                    completed: existing.completed || 'red',
+                                    constructed: existing.constructed || 'red'
+                                };
                             }
                             return newItem;
                         });
@@ -760,6 +784,13 @@
             return {label:'紧急', cls:'red', color:'#ff3b5c'};
         }
 
+        function getActionText(field, value) {
+            if (field === 'orderTaken') return value === 'green' ? '已接单' : '未接单';
+            if (field === 'completed') return value === 'green' ? '已完成' : '未完成';
+            if (field === 'constructed') return value === 'green' ? '已施工完毕' : '未施工';
+            return value === 'green' ? '已完成' : '未完成';
+        }
+
         function toggleStatus(index, field, btn) {
             const item = countdownData[index];
             const newValue = item[field] === 'red' ? 'green' : 'red';
@@ -768,9 +799,7 @@
             
             btn.classList.remove('red', 'green');
             btn.classList.add(newValue);
-            btn.textContent = (field === 'orderTaken') 
-                ? (newValue === 'green' ? '已接单' : '未接单')
-                : (newValue === 'green' ? '已完成' : '未完成');
+            btn.textContent = getActionText(field, newValue);
 
             // 同步到 Firebase
             updateTaskInFirebase(item.name, field, newValue);
@@ -797,7 +826,7 @@
 
             const circumference = 2 * Math.PI * 41;
             const dashoffset = circumference * (1 - pct / 100);
-            const trackColor = item.currentSeconds <= 0 ? '#6b7280' : '#2a2d38';
+            const trackColor = item.currentSeconds <= 0 ? '#cbd5e1' : '#e5e7eb';
 
             const acc = item.acceptSerial ? formatExcelDate(item.acceptSerial) : '—';
 
@@ -845,17 +874,24 @@
 
                     <div class="action-row">
                         <div class="action-item">
+                            <span class="action-label">施工情况</span>
+                            <button class="toggle-btn ${item.constructed || 'red'}" 
+                                    onclick="toggleStatus(${idx}, 'constructed', this)">
+                                ${getActionText('constructed', item.constructed || 'red')}
+                            </button>
+                        </div>
+                        <div class="action-item">
                             <span class="action-label">接单情况</span>
                             <button class="toggle-btn ${item.orderTaken}" 
                                     onclick="toggleStatus(${idx}, 'orderTaken', this)">
-                                ${item.orderTaken === 'green' ? '已接单' : '未接单'}
+                                ${getActionText('orderTaken', item.orderTaken)}
                             </button>
                         </div>
                         <div class="action-item">
                             <span class="action-label">是否完成</span>
                             <button class="toggle-btn ${item.completed}" 
                                     onclick="toggleStatus(${idx}, 'completed', this)">
-                                ${item.completed === 'green' ? '已完成' : '未完成'}
+                                ${getActionText('completed', item.completed)}
                             </button>
                         </div>
                     </div>
@@ -871,7 +907,7 @@
         function renderCards() {
             const wrap = document.getElementById('cards-container');
             if (!countdownData.length) {
-                wrap.innerHTML = `<div style="text-align:center; padding:70px 20px; color:#555;"><h3>暂无数据</h3><p>请上传 Excel 文件并连接房间</p></div>`;
+                wrap.innerHTML = `<div style="text-align:center; padding:70px 20px; color:#64748b; background:#ffffff; border:1px dashed #d1d5db; border-radius:16px;"><h3>暂无数据</h3><p>请上传 Excel 文件并连接房间</p></div>`;
                 return;
             }
             wrap.innerHTML = countdownData.map((it, i) => createCard(it, i)).join('');
