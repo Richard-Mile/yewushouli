@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>业务受理情况 · 实时协作版</title>
-    <!-- construction-first-light-theme: 2026-07-03 -->
+    <!-- construction-first-light-theme-autosync: 2026-07-03 -->
     
     <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -793,7 +793,8 @@
 
         function toggleStatus(index, field, btn) {
             const item = countdownData[index];
-            const newValue = item[field] === 'red' ? 'green' : 'red';
+            const currentValue = item[field] || 'red';
+            const newValue = currentValue === 'red' ? 'green' : 'red';
             
             item[field] = newValue;
             
@@ -949,6 +950,14 @@
             const d = new Date(base.getTime() + serial * 86400000);
             return d.toLocaleString('zh-CN', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false}).replace(/\//g, '-');
         }
+
+        // 页面打开后自动连接默认房间，避免去除连接提示后忘记点击“连接房间”导致不同步
+        window.addEventListener('DOMContentLoaded', () => {
+            const roomInput = document.getElementById('roomId');
+            if (roomInput && roomInput.value.trim()) {
+                connectToRoom();
+            }
+        });
 
         setInterval(updateAll, 1000);
     </script>
