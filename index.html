@@ -352,7 +352,7 @@
        <div style="margin-bottom:20px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
     <button onclick="selectFile()">📁 上传 Excel</button>
     <button onclick="refreshFromSavedFile()" style="background:#0f172a; border-color:#0f172a; box-shadow:0 6px 16px rgba(15,23,42,0.12);">⟳ 刷新数据</button>
-    <span style="color:#64748b; font-size:13px;">提示：群里所有人使用同一个房间ID，即可实时看到按钮状态</span>
+    <span style="color:#64748b; font-size:13px;">提示：可修改房间ID，输入相同房间ID的电脑会实时同步</span>
 </div>
 
         <div id="cards-container" class="cards-grid"></div>
@@ -375,6 +375,7 @@
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
 
+        const DEFAULT_ROOM_ID = '默认项目-2026';
         let currentRoomId = "";
         let countdownData = [];
         let savedFileHandle = null;
@@ -468,6 +469,24 @@
         animate();
 
         // ==================== 房间 / Firebase 同步 ====================
+        function getRoomInputValue() {
+            const input = document.getElementById('roomId');
+            return (input && input.value.trim()) ? input.value.trim() : DEFAULT_ROOM_ID;
+        }
+
+        function validateRoomId(roomId) {
+            // Firebase Realtime Database 路径不能包含 . # $ [ ] /，房间ID尽量用中文、字母、数字、短横线
+            return roomId && !/[.#$\[\]\/]/.test(roomId);
+        }
+
+        function updateRoomUrl(roomId) {
+            try {
+                const url = new URL(window.location.href);
+                url.searchParams.set('room', roomId);
+                window.history.replaceState(null, '', url.toString());
+            } catch (e) {}
+        }
+
         function taskKey(name) {
             // Firebase Realtime Database 的 key 不能包含 . # $ [ ] /
             // 用 encodeURIComponent 后再处理英文句点，确保任务名称可作为安全 key
@@ -504,11 +523,15 @@
 
         // ==================== 连接房间 ====================
         function connectToRoom() {
-            const roomInput = document.getElementById('roomId').value.trim();
-            if (!roomInput) {
-                alert("请输入房间ID");
-                return;
+            const roomInput = getRoomInputValue();
+            const inputEl = document.getElementById('roomId');
+
+            if (!validateRoomId(roomInput)) {
+                alert('房间ID不能包含这些字符：. # $ [ ] /');
+                return false;
             }
+
+            if (inputEl) inputEl.value = roomInput;
 
             // 断开之前的监听
             Object.values(firebaseListeners).forEach(listenerInfo => {
@@ -518,12 +541,30 @@
             });
             firebaseListeners = {};
 
+            // 切换房间时先清空当前卡片，避免误以为还在旧房间
+            if (currentRoomId && currentRoomId !== roomInput) {
+                countdownData = [];
+                renderCards();
+                document.querySelector('.stats').style.display = 'none';
+            }
+
             currentRoomId = roomInput;
+            try { localStorage.setItem('businessRoomId', currentRoomId); } catch (e) {}
+            updateRoomUrl(currentRoomId);
             setSyncStatus('状态：正在连接 Firebase，并读取房间 ' + currentRoomId + ' 的任务数据...', 'info');
             watchFirebaseConnection();
 
             // 重点：即使当前浏览器没有上传 Excel，也要监听 Firebase，直接从房间读取任务列表
             listenToAllTasks();
+            return true;
+        }
+
+        function ensureConnectedToInputRoom() {
+            const roomInput = getRoomInputValue();
+            if (!currentRoomId || currentRoomId !== roomInput) {
+                return connectToRoom();
+            }
+            return true;
         }
 
         // ==================== 监听 Firebase 变化 ====================
@@ -649,11 +690,8 @@
         // ==================== Excel 加载 ====================
         async function selectFile() {
             try {
-                if (!currentRoomId) {
-                    const roomInput = document.getElementById('roomId').value.trim() || '默认项目-2026';
-                    document.getElementById('roomId').value = roomInput;
-                    connectToRoom();
-                }
+                // 上传前始终以输入框里的房间ID为准，避免用户改了房间ID但数据仍写入旧房间
+                if (!ensureConnectedToInputRoom()) return;
 
                 const [h] = await window.showOpenFilePicker({ 
                     types: [{description:'Excel', accept:{'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':['.xlsx']}}] 
@@ -678,6 +716,9 @@
 
         async function refreshFromSavedFile() {
             try {
+                // 刷新前也以输入框里的房间ID为准
+                if (!ensureConnectedToInputRoom()) return;
+
                 if (!savedFileHandle) {
                     alert('请先点击“上传 Excel”选择一次文件，然后再点击“刷新数据”。\n说明：另一个浏览器只需要连接房间，不需要上传 Excel。');
                     return;
@@ -743,10 +784,7 @@
                         renderCards();
                         document.querySelector('.stats').style.display = countdownData.length ? 'flex' : 'none';
 
-                        if (!currentRoomId) {
-                            document.getElementById('roomId').value = document.getElementById('roomId').value.trim() || '默认项目-2026';
-                            connectToRoom();
-                        }
+                        if (!ensureConnectedToInputRoom()) return;
 
                         // 重点：上传/刷新 Excel 后，把完整任务列表写入 Firebase
                         // 其他浏览器只要连接同一个房间，就能直接看到数据
@@ -875,21 +913,18 @@
 
                     <div class="action-row">
                         <div class="action-item">
-                            <span class="action-label">施工情况</span>
                             <button class="toggle-btn ${item.constructed || 'red'}" 
                                     onclick="toggleStatus(${idx}, 'constructed', this)">
                                 ${getActionText('constructed', item.constructed || 'red')}
                             </button>
                         </div>
                         <div class="action-item">
-                            <span class="action-label">接单情况</span>
                             <button class="toggle-btn ${item.orderTaken}" 
                                     onclick="toggleStatus(${idx}, 'orderTaken', this)">
                                 ${getActionText('orderTaken', item.orderTaken)}
                             </button>
                         </div>
                         <div class="action-item">
-                            <span class="action-label">是否完成</span>
                             <button class="toggle-btn ${item.completed}" 
                                     onclick="toggleStatus(${idx}, 'completed', this)">
                                 ${getActionText('completed', item.completed)}
@@ -951,12 +986,28 @@
             return d.toLocaleString('zh-CN', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false}).replace(/\//g, '-');
         }
 
-        // 页面打开后自动连接默认房间，避免去除连接提示后忘记点击“连接房间”导致不同步
+        // 页面打开后自动连接：优先使用链接里的 ?room=房间ID，其次使用上次使用过的房间ID，最后使用默认房间
         window.addEventListener('DOMContentLoaded', () => {
             const roomInput = document.getElementById('roomId');
-            if (roomInput && roomInput.value.trim()) {
-                connectToRoom();
+            if (!roomInput) return;
+
+            try {
+                const urlRoom = new URL(window.location.href).searchParams.get('room');
+                const savedRoom = localStorage.getItem('businessRoomId');
+                roomInput.value = urlRoom || savedRoom || roomInput.value.trim() || DEFAULT_ROOM_ID;
+            } catch (e) {
+                roomInput.value = roomInput.value.trim() || DEFAULT_ROOM_ID;
             }
+
+            // 按 Enter 或输入框失焦后，可以快速切换房间
+            roomInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') connectToRoom();
+            });
+            roomInput.addEventListener('change', () => {
+                connectToRoom();
+            });
+
+            connectToRoom();
         });
 
         setInterval(updateAll, 1000);
