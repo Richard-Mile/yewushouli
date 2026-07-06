@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>业务受理情况 · 实时协作版</title>
-    <!-- construction-first-light-theme-autosync: 2026-07-03 -->
+    <!-- business-icons + auto-constructed-for-internet-line: 2026-07-06 -->
     
     <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -176,10 +176,91 @@
             align-items: flex-start;
             margin-bottom: 14px;
         }
+        .task-title-wrap {
+            min-width: 0;
+            flex: 1;
+        }
         .task-name {
             font-size: 16.5px;
             font-weight: 600;
             line-height: 1.3;
+            color: #0f172a;
+            word-break: break-word;
+        }
+        .business-type-row {
+            margin-top: 8px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .biz-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px 6px 8px;
+            border-radius: 999px;
+            border: 1px solid transparent;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1;
+            white-space: nowrap;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25);
+        }
+        .biz-icon {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 800;
+            flex-shrink: 0;
+        }
+        .biz-new {
+            background: #dbeafe;
+            color: #1d4ed8;
+            border-color: #93c5fd;
+        }
+        .biz-new .biz-icon {
+            background: #2563eb;
+            color: #ffffff;
+        }
+        .biz-change {
+            background: #f3e8ff;
+            color: #7c3aed;
+            border-color: #c4b5fd;
+        }
+        .biz-change .biz-icon {
+            background: #8b5cf6;
+            color: #ffffff;
+        }
+        .biz-gov {
+            background: #dcfce7;
+            color: #166534;
+            border-color: #86efac;
+        }
+        .biz-gov .biz-icon {
+            background: #16a34a;
+            color: #ffffff;
+        }
+        .biz-ethernet {
+            background: #ffedd5;
+            color: #c2410c;
+            border-color: #fdba74;
+        }
+        .biz-ethernet .biz-icon {
+            background: #ea580c;
+            color: #ffffff;
+        }
+        .biz-generic {
+            background: #e2e8f0;
+            color: #334155;
+            border-color: #cbd5e1;
+        }
+        .biz-generic .biz-icon {
+            background: #64748b;
+            color: #ffffff;
         }
         .status-pill {
             font-size: 11px;
@@ -469,6 +550,68 @@
         animate();
 
         // ==================== 房间 / Firebase 同步 ====================
+        function normalizeBusinessType(typeText = '') {
+            const text = String(typeText || '').replace(/[（）()]/g, '').trim();
+            if (!text) return '';
+            if (text.includes('互联网专线新开')) return '互联网专线新开';
+            if (text.includes('互联网专线变更')) return '互联网专线变更';
+            if (text.includes('政企精品网')) return '政企精品网';
+            if (text.includes('以太网')) return '以太网';
+            return text;
+        }
+
+        function extractBusinessType(name = '', fallback = '') {
+            const text = String(name || '');
+            const matched = text.match(/[（(]([^（）()]+)[）)]/g) || [];
+            for (const seg of matched) {
+                const normalized = normalizeBusinessType(seg);
+                if (normalized) return normalized;
+            }
+            return normalizeBusinessType(fallback);
+        }
+
+        function getBusinessTypeMeta(typeText = '') {
+            const type = normalizeBusinessType(typeText);
+            if (type === '互联网专线新开') {
+                return { label: '互联网专线新开', icon: '新', cls: 'biz-new' };
+            }
+            if (type === '互联网专线变更') {
+                return { label: '互联网专线变更', icon: '变', cls: 'biz-change' };
+            }
+            if (type === '政企精品网') {
+                return { label: '政企精品网', icon: '政', cls: 'biz-gov' };
+            }
+            if (type === '以太网') {
+                return { label: '以太网', icon: '以', cls: 'biz-ethernet' };
+            }
+            if (type) {
+                return { label: type, icon: '业', cls: 'biz-generic' };
+            }
+            return null;
+        }
+
+        function isInternetLineBusiness(typeOrItem = '') {
+            const raw = (typeof typeOrItem === 'object')
+                ? `${typeOrItem.businessType || ''} ${typeOrItem.name || ''}`
+                : String(typeOrItem || '');
+            const type = normalizeBusinessType(raw);
+            return type === '互联网专线新开' || type === '互联网专线变更'
+                || raw.includes('互联网专线新开') || raw.includes('互联网专线变更');
+        }
+
+        function cleanTaskName(name = '', typeText = '') {
+            let title = String(name || '').trim();
+            const type = normalizeBusinessType(typeText) || extractBusinessType(title);
+            if (type) {
+                const escaped = type.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                title = title
+                    .replace(new RegExp(`\\s*[（(]${escaped}[）)]\\s*`, 'g'), ' ')
+                    .replace(/\s{2,}/g, ' ')
+                    .trim();
+            }
+            return title;
+        }
+
         function getRoomInputValue() {
             const input = document.getElementById('roomId');
             return (input && input.value.trim()) ? input.value.trim() : DEFAULT_ROOM_ID;
@@ -502,15 +645,17 @@
 
         function normalizeTaskFromFirebase(fbTask) {
             const initialSeconds = Number(fbTask.initialSeconds) || 0;
+            const businessType = normalizeBusinessType(fbTask.businessType || extractBusinessType(fbTask.name || ''));
             const item = {
                 name: fbTask.name || '未命名任务',
+                businessType,
                 acceptSerial: fbTask.acceptSerial || '',
                 initialSeconds,
                 endAt: Number(fbTask.endAt) || (Date.now() + initialSeconds * 1000),
                 currentSeconds: 0,
                 orderTaken: fbTask.orderTaken || 'red',
                 completed: fbTask.completed || 'red',
-                constructed: fbTask.constructed || 'red'
+                constructed: isInternetLineBusiness(businessType || fbTask.name) ? 'green' : (fbTask.constructed || 'red')
             };
             item.currentSeconds = calcRemainSeconds(item);
             return item;
@@ -646,13 +791,14 @@
 
                 payload[key] = {
                     name: item.name,
+                    businessType: normalizeBusinessType(item.businessType || extractBusinessType(item.name || '')),
                     acceptSerial: item.acceptSerial || '',
                     initialSeconds,
                     // 用统一截止时间同步倒计时，其他浏览器不用上传 Excel 也能显示准确剩余时间
                     endAt: now + initialSeconds * 1000,
                     orderTaken: item.orderTaken || oldTask.orderTaken || 'red',
                     completed: item.completed || oldTask.completed || 'red',
-                    constructed: item.constructed || oldTask.constructed || 'red',
+                    constructed: isInternetLineBusiness(item.businessType || item.name) ? 'green' : (item.constructed || oldTask.constructed || 'red'),
                     updatedAt: firebase.database.ServerValue.TIMESTAMP
                 };
             });
@@ -752,16 +898,19 @@
                         for (let i = 1; i < rows.length; i++) {
                             const row = rows[i];
                             if (row[0] && row[2]) {
+                                const rawName = String(row[0]).trim();
                                 const secs = parseChineseDuration(String(row[2]).trim());
+                                const businessType = extractBusinessType(rawName, row[4] || '');
                                 newData.push({
-                                    name: String(row[0]).trim(),
+                                    name: rawName,
+                                    businessType,
                                     acceptSerial: row[1] || '',
                                     initialSeconds: secs,
                                     endAt: Date.now() + secs * 1000,
                                     currentSeconds: secs,
                                     orderTaken: 'red',
                                     completed: 'red',
-                                    constructed: 'red'
+                                    constructed: isInternetLineBusiness(businessType || rawName) ? 'green' : 'red'
                                 });
                             }
                         }
@@ -772,9 +921,10 @@
                             if (existing) {
                                 return {
                                     ...newItem,
+                                    businessType: newItem.businessType || existing.businessType || extractBusinessType(newItem.name || existing.name || ''),
                                     orderTaken: existing.orderTaken || 'red',
                                     completed: existing.completed || 'red',
-                                    constructed: existing.constructed || 'red'
+                                    constructed: isInternetLineBusiness(newItem.businessType || newItem.name) ? 'green' : (existing.constructed || 'red')
                                 };
                             }
                             return newItem;
@@ -831,11 +981,22 @@
 
         function toggleStatus(index, field, btn) {
             const item = countdownData[index];
+
+            // 互联网专线业务（新开/变更）默认视为已施工完毕，施工按钮保持绿色，不允许被误点回红色。
+            if (field === 'constructed' && isInternetLineBusiness(item.businessType || item.name)) {
+                item.constructed = 'green';
+                btn.classList.remove('red', 'green');
+                btn.classList.add('green');
+                btn.textContent = getActionText('constructed', 'green');
+                updateTaskInFirebase(item.name, 'constructed', 'green');
+                return;
+            }
+
             const currentValue = item[field] || 'red';
             const newValue = currentValue === 'red' ? 'green' : 'red';
-            
+
             item[field] = newValue;
-            
+
             btn.classList.remove('red', 'green');
             btn.classList.add(newValue);
             btn.textContent = getActionText(field, newValue);
@@ -847,6 +1008,9 @@
         function createCard(item, idx) {
             const st = getStatus(item.currentSeconds);
             const days = item.currentSeconds / 86400;
+            const businessMeta = getBusinessTypeMeta(item.businessType || extractBusinessType(item.name || ''));
+            const displayName = cleanTaskName(item.name || '', item.businessType || '');
+            const constructedValue = isInternetLineBusiness(item.businessType || item.name) ? 'green' : (item.constructed || 'red');
 
             let cls = 'task-card';
             if (item.currentSeconds <= 0) cls += ' completed';
@@ -872,7 +1036,16 @@
             return `
                 <div class="${cls}" data-index="${idx}">
                     <div class="card-header">
-                        <div class="task-name">${item.name}</div>
+                        <div class="task-title-wrap">
+                            <div class="task-name">${displayName}</div>
+                            ${businessMeta ? `
+                            <div class="business-type-row">
+                                <div class="biz-badge ${businessMeta.cls}">
+                                    <span class="biz-icon">${businessMeta.icon}</span>
+                                    <span>${businessMeta.label}</span>
+                                </div>
+                            </div>` : ''}
+                        </div>
                         <div class="status-pill ${st.cls}">${st.label}</div>
                     </div>
 
@@ -913,9 +1086,9 @@
 
                     <div class="action-row">
                         <div class="action-item">
-                            <button class="toggle-btn ${item.constructed || 'red'}" 
+                            <button class="toggle-btn ${constructedValue}" 
                                     onclick="toggleStatus(${idx}, 'constructed', this)">
-                                ${getActionText('constructed', item.constructed || 'red')}
+                                ${getActionText('constructed', constructedValue)}
                             </button>
                         </div>
                         <div class="action-item">
