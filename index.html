@@ -1016,8 +1016,10 @@
         }
 
         function maskSensitiveWords(value) {
-            // 页面显示时屏蔽“联通”两个字，不影响 Firebase 存储和任务匹配。
-            return String(value || '').replace(/联通/g, '**');
+            // 页面展示层统一屏蔽“联通”，包含“联 通”、零宽字符等情况。
+            // 不改变 Firebase 原始数据，不影响任务 key 和同步。
+            return String(value || '')
+                .replace(/联[\s\u200B\u200C\u200D\uFEFF]*通/g, '**');
         }
 
         function escapeHtml(value) {
@@ -1495,13 +1497,37 @@
             `;
         }
 
+        function maskVisibleSensitiveWords(root = document.body) {
+            if (!root) return;
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+                acceptNode(node) {
+                    const parent = node.parentElement;
+                    if (!parent) return NodeFilter.FILTER_REJECT;
+                    const tag = parent.tagName;
+                    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'INPUT' || tag === 'TEXTAREA') {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    return /联[\\s\\u200B\\u200C\\u200D\\uFEFF]*通/.test(node.nodeValue)
+                        ? NodeFilter.FILTER_ACCEPT
+                        : NodeFilter.FILTER_REJECT;
+                }
+            });
+            const nodes = [];
+            while (walker.nextNode()) nodes.push(walker.currentNode);
+            nodes.forEach(node => {
+                node.nodeValue = maskSensitiveWords(node.nodeValue);
+            });
+        }
+
         function renderCards() {
             const wrap = document.getElementById('cards-container');
             if (!countdownData.length) {
                 wrap.innerHTML = `<div style="text-align:center; padding:70px 20px; color:#64748b; background:#ffffff; border:1px dashed #d1d5db; border-radius:16px;"><h3>暂无数据</h3><p>请上传 Excel 文件并连接房间</p></div>`;
+                maskVisibleSensitiveWords(wrap);
                 return;
             }
             wrap.innerHTML = countdownData.map((it, i) => createCard(it, i)).join('');
+            maskVisibleSensitiveWords(wrap);
             updateStats();
         }
 
@@ -1573,6 +1599,7 @@
 
             initAuth();
             connectToRoom();
+            setTimeout(() => maskVisibleSensitiveWords(document.body), 300);
         });
 
         setInterval(updateAll, 1000);
