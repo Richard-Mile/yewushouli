@@ -9,6 +9,7 @@
     <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     
@@ -386,6 +387,122 @@
         .toggle-btn.green { background: #22c55e; }
         .toggle-btn:hover { filter: brightness(1.1); }
 
+
+        .chat-panel {
+            margin-top: 14px;
+            padding: 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            background: #f8fafc;
+        }
+        .chat-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            color: #334155;
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .chat-count {
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .chat-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 128px;
+            overflow-y: auto;
+            padding-right: 2px;
+        }
+        .chat-empty {
+            color: #94a3b8;
+            font-size: 12px;
+            padding: 6px 0;
+        }
+        .chat-msg {
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 7px 8px;
+        }
+        .chat-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            color: #64748b;
+            font-size: 10.5px;
+            margin-bottom: 4px;
+        }
+        .chat-author {
+            font-weight: 800;
+            color: #334155;
+        }
+        .chat-text {
+            color: #0f172a;
+            font-size: 12.5px;
+            line-height: 1.45;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .chat-delete {
+            margin-top: 6px;
+            padding: 3px 8px;
+            border-radius: 999px;
+            border: none;
+            background: #fee2e2;
+            color: #991b1b;
+            font-size: 11px;
+            font-weight: 800;
+            cursor: pointer;
+            box-shadow: none;
+        }
+        .chat-input-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 9px;
+        }
+        .chat-input-row input {
+            flex: 1;
+            min-width: 0;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            padding: 8px 10px;
+            outline: none;
+            font-size: 13px;
+            background: #fff;
+            color: #0f172a;
+        }
+        .chat-input-row input:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37,99,235,0.10);
+        }
+        .chat-send-btn {
+            padding: 8px 12px;
+            border-radius: 10px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .admin-auth-btn {
+            background:#475569 !important;
+            border-color:#475569 !important;
+            box-shadow:0 6px 16px rgba(71,85,105,0.12) !important;
+        }
+        .admin-auth-btn.admin-on {
+            background:#16a34a !important;
+            border-color:#16a34a !important;
+        }
+        .admin-status {
+            color:#64748b;
+            font-size:12px;
+            max-width: 360px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
         .meta {
             margin-top: 12px;
             font-size: 12px;
@@ -433,6 +550,8 @@
        <div style="margin-bottom:20px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
     <button onclick="selectFile()">📁 上传 Excel</button>
     <button onclick="refreshFromSavedFile()" style="background:#0f172a; border-color:#0f172a; box-shadow:0 6px 16px rgba(15,23,42,0.12);">⟳ 刷新数据</button>
+    <button id="adminLoginBtn" class="admin-auth-btn" onclick="toggleAdminLogin()">管理员登录</button>
+    <span id="adminStatus" class="admin-status">未登录管理员，仅可留言</span>
     <span style="color:#64748b; font-size:13px;">提示：可修改房间ID，输入相同房间ID的电脑会实时同步</span>
 </div>
 
@@ -457,8 +576,16 @@
         const database = firebase.database();
 
         const DEFAULT_ROOM_ID = '默认项目-2026';
+
+        // 重要：把这里替换成你自己的 Firebase Auth 用户 UID。
+        // 只有这个 UID 登录后，页面才显示“删除”按钮；配合下方 Firebase 规则后，其他人无法删除留言。
+        const ADMIN_UID = '请替换成你的FirebaseAuthUID';
+
         let currentRoomId = "";
         let countdownData = [];
+        let chatMessagesByTask = {};
+        let chatDrafts = {};
+        let currentUser = null;
         let savedFileHandle = null;
         let firebaseListeners = {};
         let firebaseConnected = false;
@@ -689,6 +816,8 @@
             // 切换房间时先清空当前卡片，避免误以为还在旧房间
             if (currentRoomId && currentRoomId !== roomInput) {
                 countdownData = [];
+                chatMessagesByTask = {};
+                chatDrafts = {};
                 renderCards();
                 document.querySelector('.stats').style.display = 'none';
             }
@@ -701,6 +830,7 @@
 
             // 重点：即使当前浏览器没有上传 Excel，也要监听 Firebase，直接从房间读取任务列表
             listenToAllTasks();
+            listenToAllChats();
             return true;
         }
 
@@ -710,6 +840,224 @@
                 return connectToRoom();
             }
             return true;
+        }
+
+
+        // ==================== 聊天室 / 管理员删除 ====================
+        function initAuth() {
+            if (!firebase.auth) return;
+            firebase.auth().onAuthStateChanged(user => {
+                currentUser = user || null;
+                updateAdminStatus();
+                renderCards();
+            });
+        }
+
+        function isAdmin() {
+            return !!(currentUser && currentUser.uid === ADMIN_UID);
+        }
+
+        function updateAdminStatus() {
+            const btn = document.getElementById('adminLoginBtn');
+            const status = document.getElementById('adminStatus');
+            if (!btn || !status) return;
+
+            if (!currentUser) {
+                btn.textContent = '管理员登录';
+                btn.classList.remove('admin-on');
+                status.textContent = '未登录管理员，仅可留言';
+                return;
+            }
+
+            if (isAdmin()) {
+                btn.textContent = '退出管理员';
+                btn.classList.add('admin-on');
+                status.textContent = '管理员已登录，可删除留言';
+            } else {
+                btn.textContent = '退出登录';
+                btn.classList.remove('admin-on');
+                status.textContent = '当前账号无删除权限，UID：' + currentUser.uid;
+            }
+        }
+
+        async function toggleAdminLogin() {
+            try {
+                if (currentUser) {
+                    await firebase.auth().signOut();
+                    return;
+                }
+                const provider = new firebase.auth.GoogleAuthProvider();
+                await firebase.auth().signInWithPopup(provider);
+            } catch (err) {
+                console.error('管理员登录失败:', err);
+                alert('管理员登录失败：' + err.message);
+            }
+        }
+
+        function getChatAuthor() {
+            if (currentUser && currentUser.displayName) return currentUser.displayName;
+            let name = '';
+            try { name = localStorage.getItem('chatVisitorName') || ''; } catch(e) {}
+            if (!name) {
+                name = '访客' + Math.floor(1000 + Math.random() * 9000);
+                try { localStorage.setItem('chatVisitorName', name); } catch(e) {}
+            }
+            return name;
+        }
+
+        function getCurrentRoomChatsRef() {
+            if (!currentRoomId) return null;
+            return database.ref(`rooms/${currentRoomId}/taskChats`);
+        }
+
+        function listenToAllChats() {
+            if (!currentRoomId) return;
+
+            if (firebaseListeners['allChats']) {
+                const old = firebaseListeners['allChats'];
+                old.ref.off(old.event, old.callback);
+                delete firebaseListeners['allChats'];
+            }
+
+            const chatsRef = getCurrentRoomChatsRef();
+            if (!chatsRef) return;
+
+            const callback = (snapshot) => {
+                const data = snapshot.val() || {};
+                const next = {};
+
+                Object.keys(data).forEach(taskSafeKey => {
+                    const messages = (data[taskSafeKey] && data[taskSafeKey].messages) || {};
+                    next[taskSafeKey] = Object.keys(messages).map(id => ({
+                        id,
+                        ...messages[id]
+                    })).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)).slice(-30);
+                });
+
+                chatMessagesByTask = next;
+                renderCards();
+            };
+
+            chatsRef.on('value', callback, (error) => {
+                console.error('读取聊天室失败:', error);
+            });
+
+            firebaseListeners['allChats'] = { ref: chatsRef, event: 'value', callback };
+        }
+
+        function saveChatDraftByIndex(index, value) {
+            const item = countdownData[index];
+            if (!item) return;
+            chatDrafts[taskKey(item.name)] = value;
+        }
+
+        async function sendChatMessageByIndex(index) {
+            const item = countdownData[index];
+            if (!item) return;
+            if (!ensureConnectedToInputRoom()) return;
+
+            const taskSafeKey = taskKey(item.name);
+            const input = document.getElementById('chat-input-' + index);
+            const text = ((input && input.value) || chatDrafts[taskSafeKey] || '').trim();
+
+            if (!text) return;
+            if (text.length > 500) {
+                alert('留言最多 500 个字。');
+                return;
+            }
+
+            try {
+                const msgRef = database.ref(`rooms/${currentRoomId}/taskChats/${taskSafeKey}/messages`).push();
+                await msgRef.set({
+                    text,
+                    author: getChatAuthor(),
+                    authorUid: currentUser ? currentUser.uid : '',
+                    createdAt: firebase.database.ServerValue.TIMESTAMP
+                });
+                chatDrafts[taskSafeKey] = '';
+                if (input) input.value = '';
+            } catch (err) {
+                console.error('发送留言失败:', err);
+                alert('发送留言失败：' + err.message);
+            }
+        }
+
+        async function deleteChatMessage(taskSafeKey, messageId) {
+            if (!isAdmin()) {
+                alert('只有管理员可以删除留言。');
+                return;
+            }
+
+            if (!confirm('确定删除这条留言吗？')) return;
+
+            try {
+                await database.ref(`rooms/${currentRoomId}/taskChats/${taskSafeKey}/messages/${messageId}`).remove();
+            } catch (err) {
+                console.error('删除留言失败:', err);
+                alert('删除失败：' + err.message + '\\n请检查 Firebase 规则是否已经限制为管理员删除。');
+            }
+        }
+
+        function formatChatTime(ts) {
+            if (!ts) return '';
+            const d = new Date(ts);
+            if (isNaN(d.getTime())) return '';
+            return d.toLocaleString('zh-CN', {
+                month:'2-digit',
+                day:'2-digit',
+                hour:'2-digit',
+                minute:'2-digit',
+                hour12:false
+            }).replace(/\//g, '-');
+        }
+
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function escapeAttr(value) {
+            return escapeHtml(value).replace(/`/g, '&#96;');
+        }
+
+        function renderChatPanel(item, idx) {
+            const taskSafeKey = taskKey(item.name);
+            const messages = chatMessagesByTask[taskSafeKey] || [];
+            const draft = chatDrafts[taskSafeKey] || '';
+
+            const listHtml = messages.length ? messages.map(msg => `
+                <div class="chat-msg">
+                    <div class="chat-meta">
+                        <span class="chat-author">${escapeHtml(msg.author || '访客')}</span>
+                        <span>${escapeHtml(formatChatTime(msg.createdAt))}</span>
+                    </div>
+                    <div class="chat-text">${escapeHtml(msg.text || '')}</div>
+                    ${isAdmin() ? `<button class="chat-delete" onclick="deleteChatMessage('${taskSafeKey}', '${msg.id}')">删除</button>` : ''}
+                </div>
+            `).join('') : `<div class="chat-empty">暂无留言</div>`;
+
+            return `
+                <div class="chat-panel">
+                    <div class="chat-head">
+                        <span>聊天室留言</span>
+                        <span class="chat-count">${messages.length} 条</span>
+                    </div>
+                    <div class="chat-list">${listHtml}</div>
+                    <div class="chat-input-row">
+                        <input id="chat-input-${idx}"
+                               value="${escapeAttr(draft)}"
+                               maxlength="500"
+                               placeholder="输入留言，按 Enter 发送"
+                               oninput="saveChatDraftByIndex(${idx}, this.value)"
+                               onkeydown="if(event.key === 'Enter'){ event.preventDefault(); sendChatMessageByIndex(${idx}); }">
+                        <button class="chat-send-btn" onclick="sendChatMessageByIndex(${idx})">发送</button>
+                    </div>
+                </div>
+            `;
         }
 
         // ==================== 监听 Firebase 变化 ====================
@@ -1084,6 +1432,8 @@
                         </div>
                     </div>
 
+                    ${renderChatPanel(item, idx)}
+
                     <div class="action-row">
                         <div class="action-item">
                             <button class="toggle-btn ${constructedValue}" 
@@ -1180,6 +1530,7 @@
                 connectToRoom();
             });
 
+            initAuth();
             connectToRoom();
         });
 
