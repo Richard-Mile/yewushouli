@@ -1015,8 +1015,13 @@
             }).replace(/\//g, '-');
         }
 
+        function maskSensitiveWords(value) {
+            // 页面显示时屏蔽“联通”两个字，不影响 Firebase 存储和任务匹配。
+            return String(value || '').replace(/联通/g, '**');
+        }
+
         function escapeHtml(value) {
-            return String(value || '')
+            return maskSensitiveWords(value)
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
@@ -1412,12 +1417,12 @@
                 <div class="${cls}" data-index="${idx}">
                     <div class="card-header">
                         <div class="task-title-wrap">
-                            <div class="task-name">${displayName}</div>
+                            <div class="task-name">${escapeHtml(displayName)}</div>
                             ${businessMeta ? `
                             <div class="business-type-row">
                                 <div class="biz-badge ${businessMeta.cls}">
-                                    <span class="biz-icon">${businessMeta.icon}</span>
-                                    <span>${businessMeta.label}</span>
+                                    <span class="biz-icon">${escapeHtml(businessMeta.icon)}</span>
+                                    <span>${escapeHtml(businessMeta.label)}</span>
                                 </div>
                             </div>` : ''}
                         </div>
