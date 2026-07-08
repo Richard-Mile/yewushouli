@@ -57,7 +57,7 @@
             font-size: 34px;
             font-weight: 700;
             margin: 0;
-            letter-spacing: -2px;
+            letter-spacing: 0;
         }
 
         .room-control {
@@ -586,6 +586,8 @@
         let chatMessagesByTask = {};
         let chatDrafts = {};
         let currentUser = null;
+        let isChatInputFocused = false;
+        let isComposingChinese = false;
         let savedFileHandle = null;
         let firebaseListeners = {};
         let firebaseConnected = false;
@@ -849,7 +851,7 @@
             firebase.auth().onAuthStateChanged(user => {
                 currentUser = user || null;
                 updateAdminStatus();
-                renderCards();
+                if (!isChatInputActive() && !isComposingChinese) renderCards();
             });
         }
 
@@ -935,7 +937,9 @@
                 });
 
                 chatMessagesByTask = next;
-                renderCards();
+                if (!isChatInputActive() && !isComposingChinese) {
+                    renderCards();
+                }
             };
 
             chatsRef.on('value', callback, (error) => {
@@ -1024,6 +1028,21 @@
             return escapeHtml(value).replace(/`/g, '&#96;');
         }
 
+
+        function isChatInputActive() {
+            const el = document.activeElement;
+            return !!(el && el.id && String(el.id).startsWith('chat-input-'));
+        }
+
+        function escapeJsAttr(value) {
+            return String(value || '')
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "\\'")
+                .replace(/"/g, '&quot;')
+                .replace(/\n/g, '\\n')
+                .replace(/\r/g, '');
+        }
+
         function renderChatPanel(item, idx) {
             const taskSafeKey = taskKey(item.name);
             const messages = chatMessagesByTask[taskSafeKey] || [];
@@ -1052,8 +1071,12 @@
                                value="${escapeAttr(draft)}"
                                maxlength="500"
                                placeholder="输入留言，按 Enter 发送"
+                               onfocus="isChatInputFocused = true"
+                               onblur="isChatInputFocused = false"
+                               oncompositionstart="isComposingChinese = true"
+                               oncompositionend="isComposingChinese = false; saveChatDraftByIndex(${idx}, this.value)"
                                oninput="saveChatDraftByIndex(${idx}, this.value)"
-                               onkeydown="if(event.key === 'Enter'){ event.preventDefault(); sendChatMessageByIndex(${idx}); }">
+                               onkeydown="if(event.key === 'Enter' && !event.isComposing && !isComposingChinese){ event.preventDefault(); sendChatMessageByIndex(${idx}); }">
                         <button class="chat-send-btn" onclick="sendChatMessageByIndex(${idx})">发送</button>
                     </div>
                 </div>
@@ -1083,7 +1106,11 @@
                 const list = Object.values(firebaseData).map(normalizeTaskFromFirebase);
 
                 countdownData = list.sort((a,b) => a.currentSeconds - b.currentSeconds);
-                renderCards();
+                if (!isChatInputActive() && !isComposingChinese) {
+                    renderCards();
+                } else {
+                    updateStats();
+                }
 
                 if (countdownData.length) {
                     document.querySelector('.stats').style.display = 'flex';
@@ -1495,9 +1522,18 @@
 
         function updateAll() {
             if (!countdownData.length) return;
+
             countdownData.forEach(it => {
                 it.currentSeconds = calcRemainSeconds(it);
             });
+
+            // 聊天输入框获得焦点时，不再每秒重绘整张卡片。
+            // 这样不会打断中文输入法，也不会造成聊天框频繁闪烁。
+            if (isChatInputActive() || isComposingChinese) {
+                updateStats();
+                return;
+            }
+
             countdownData.sort((a,b) => a.currentSeconds - b.currentSeconds);
             renderCards();
         }
